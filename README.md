@@ -19,6 +19,8 @@ https://github.com/user-attachments/assets/4b9859d6-acf4-4bbe-991c-0ca8718618e0
 
 ```bash
 cargo install --git https://github.com/tatlilimon/ascii-shadow
+
+echo 'export PATH="$HOME/.cargo/bin:$PATH"' >> ~/.bashrc  #if you're using zsh, replace .zshrc with .bashrc
 ```
 
 Or build from source:

@@ -38,6 +38,9 @@ The binary will be at `target/release/ascii-shadow`.
 # Basic usage - auto-detect terminal size
 ascii-shadow --input image.png
 
+# URL as image input
+ascii-shadow --input https://example.com/image.png
+
 # Specific dimensions
 ascii-shadow --input image.png --width 80 --height 40
 
@@ -69,7 +72,7 @@ ascii-shadow --input image.png --background 1a1a2e
 
 | Option | Description |
 |---------|-------------|
-| `-i, --input <FILE>` | Input image path (required) |
+| `-i, --input <FILE> or <URL>` | Input image path or url like 'https://example.com/image.png' (required) |
 | `-o, --output <FILE>` | Output file (optional, prints to stdout if not specified) |
 | `-c, --charset <NAME>` | Charset: `standard`, `extended`, `alphanumeric`, `numbers`, `blocks`, `braille` (default: `standard`) |
 | `--custom-charset <CHARS>` | Custom charset string |

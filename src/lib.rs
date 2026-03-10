@@ -4,6 +4,7 @@ pub mod charset;
 pub mod cli;
 pub mod color;
 pub mod converter;
+pub mod gif;
 pub mod image;
 pub mod output;
 pub mod terminal;

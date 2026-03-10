@@ -10,6 +10,7 @@ https://github.com/user-attachments/assets/4b9859d6-acf4-4bbe-991c-0ca8718618e0
 
 - **Multiple charsets**: Standard ASCII, Extended, Alphanumeric, Numbers-only, Block characters, and Braille patterns
 - **Color support**: Truecolor (24-bit), 256-color palette, Grayscale, or no color
+- **GIF animation**: Animated GIF playback with frame timing, loop control, and screen clear options
 - **Auto-sizing**: Automatically calculates optimal dimensions based on terminal size
 - **Image adjustments**: Contrast, brightness, and color inversion
 - **Resize modes**: Fit, fill, stretch, or crop to target dimensions
@@ -40,6 +41,10 @@ ascii-shadow --input image.png
 
 # URL as image input
 ascii-shadow --input https://example.com/image.png
+
+
+# GIF animation with custom settings gif can be also URL format
+ascii-shadow --input animation.gif --fps 30 --loops 0 --no-clear 
 
 # Specific dimensions
 ascii-shadow --input image.png --width 80 --height 40
@@ -86,12 +91,20 @@ ascii-shadow --input image.png --background 1a1a2e
 | `--background <HEX>` | Background color in hex format (e.g., `1a1a2e`) or `none` |
 | `--resize <MODE>` | Resize mode: `fit`, `fill`, `stretch`, `crop` (default: `fit`) |
 | `--preserve-aspect-ratio` | Preserve aspect ratio (default: true) |
+| `--fps <N>` | Frames per second for GIF playback (overrides native timing) |
+| `--loops <N>` | Number of animation loops, 0 = infinite (uses GIF native setting if not specified) |
+| `--no-clear` | Don't clear screen between GIF frames (scrolling mode vs clear screen mode) |
 
 ## Supported Image Formats
 
 PNG, JPEG, WebP, GIF, BMP, TIFF, and more via the `image` crate.
 
 ## Examples
+
+### Animated GIF
+```bash
+ascii-shadow --input animation.gif --fps 30 --loops 0 --no-clear
+```
 
 ### Simple ASCII art
 ```bash

@@ -103,6 +103,18 @@ pub struct Args {
     /// Preserve aspect ratio
     #[arg(long, default_value_t = true)]
     pub preserve_aspect_ratio: bool,
+
+    /// Frames per second override for GIF playback
+    #[arg(long, value_name = "N")]
+    pub fps: Option<u32>,
+
+    /// Number of animation loops (0 = infinite)
+    #[arg(long, default_value_t = 1, value_name = "N")]
+    pub loops: u32,
+
+    /// Don't clear screen between frames (scrolling effect)
+    #[arg(long, default_value_t = false)]
+    pub no_clear: bool,
 }
 
 impl Args {
@@ -127,6 +139,9 @@ impl Args {
         println!("    --background <HEX>         Background color in hex format");
         println!("    --resize <MODE>             Resize mode: fit, fill, stretch, crop");
         println!("    --preserve-aspect-ratio    Preserve aspect ratio");
+        println!("    --fps <N>                  Frames per second for GIF playback");
+        println!("    --loops <N>                Number of animation loops (0 = infinite)");
+        println!("    --no-clear                 Don't clear screen between frames");
         println!("    --help                      Show this help message (long flag only)");
         println!();
         println!("CHARSETS:");
@@ -269,6 +284,9 @@ impl Default for Args {
             background: None,
             resize: "fit".to_string(),
             preserve_aspect_ratio: true,
+            fps: None,
+            loops: 1,
+            no_clear: false,
         }
     }
 }

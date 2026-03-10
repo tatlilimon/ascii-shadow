@@ -9,7 +9,7 @@ mod output;
 mod terminal;
 
 use anyhow::{Context, Result};
-use cli::Args;
+use cli::{Args, InputSource};
 use color::ColorMode;
 use converter::{convert, ConverterConfig};
 use std::str::FromStr;
@@ -17,9 +17,15 @@ use std::str::FromStr;
 fn main() -> Result<()> {
     let args = Args::parse_args()?;
 
+    // Parse the input source
+    let input_source = InputSource::from_str(args.input.clone());
+
     // Load the image
-    let img = image::load_image(&args.input)
-        .with_context(|| format!("Failed to load image: {}", args.input.display()))?;
+    let img = image::load_image(&input_source)
+        .with_context(|| match &input_source {
+            InputSource::File(p) => format!("Failed to load image: {}", p.display()),
+            InputSource::Url(u) => format!("Failed to load image from URL: {}", u),
+        })?;
 
     // Get terminal size for auto-sizing
     let (term_cols, term_rows) = terminal::get_terminal_size()

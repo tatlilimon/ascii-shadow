@@ -4,14 +4,53 @@ use anyhow::Result;
 use clap::Parser;
 use std::path::PathBuf;
 
+/// Input source for the image conversion
+#[derive(Debug, Clone, PartialEq)]
+pub enum InputSource {
+    /// Local file path
+    File(PathBuf),
+    /// Remote URL (http:// or https://)
+    Url(String),
+}
+
+impl InputSource {
+    /// Create an InputSource from a string
+    /// Detects URLs starting with http:// or https://
+    pub fn from_str(s: String) -> Self {
+        if s.starts_with("http://") || s.starts_with("https://") {
+            InputSource::Url(s)
+        } else {
+            InputSource::File(PathBuf::from(s))
+        }
+    }
+
+    /// Check if this is a file source
+    pub fn is_file(&self) -> bool {
+        matches!(self, InputSource::File(_))
+    }
+
+    /// Check if this is a URL source
+    pub fn is_url(&self) -> bool {
+        matches!(self, InputSource::Url(_))
+    }
+
+    /// Get display string for error messages
+    pub fn display(&self) -> String {
+        match self {
+            InputSource::File(p) => p.display().to_string(),
+            InputSource::Url(u) => u.clone(),
+        }
+    }
+}
+
 /// ASCII Shadow - Convert images to ASCII art with color support
 #[derive(Parser, Debug)]
 #[command(name = "ascii-shadow")]
 #[command(author, version, about, long_about = None)]
 pub struct Args {
-    /// Input image path
-    #[arg(short, long, value_name = "FILE")]
-    pub input: PathBuf,
+    /// Input image path or URL
+    #[arg(short, long, value_name = "FILE|URL")]
+    pub input: String,
 
     /// Output file (optional, prints to stdout if not specified)
     #[arg(short, long, value_name = "FILE")]
@@ -72,10 +111,10 @@ impl Args {
         println!("Convert images to ASCII art with color support");
         println!();
         println!("USAGE:");
-        println!("    ascii-shadow [OPTIONS] --input <FILE>");
+        println!("    ascii-shadow [OPTIONS] --input <FILE|URL>");
         println!();
         println!("OPTIONS:");
-        println!("    -i, --input <FILE>         Input image path (required)");
+        println!("    -i, --input <FILE|URL>     Input image path or URL (required)");
         println!("    -o, --output <FILE>        Output file (prints to stdout if not specified)");
         println!("    -c, --charset <NAME>       Charset: standard, extended, alphanumeric, numbers, blocks, braille");
         println!("        --custom-charset <CHARS>   Custom charset string");
@@ -115,6 +154,7 @@ impl Args {
         println!("    ascii-shadow --input photo.jpg --charset braille");
         println!("    ascii-shadow --input logo.png --width 80 --height 40");
         println!("    ascii-shadow --input diagram.png --output art.txt");
+        println!("    ascii-shadow --input https://example.com/image.png");
     }
 
     /// Parse and validate CLI arguments
@@ -137,9 +177,12 @@ impl Args {
             }
         };
 
-        // Validate input file exists
-        if !args.input.exists() {
-            anyhow::bail!("Input file not found: {}", args.input.display());
+        // Validate input file exists (only for local files, not URLs)
+        let input_source = InputSource::from_str(args.input.clone());
+        if let InputSource::File(path) = &input_source {
+            if !path.exists() {
+                anyhow::bail!("Input file not found: {}", path.display());
+            }
         }
 
         // Validate contrast range
@@ -212,7 +255,7 @@ mod tests {
 impl Default for Args {
     fn default() -> Self {
         Self {
-            input: PathBuf::from("test.png"),
+            input: "test.png".to_string(),
             output: None,
             charset: "standard".to_string(),
             custom_charset: None,

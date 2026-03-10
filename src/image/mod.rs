@@ -1,13 +1,46 @@
 //! Image loading, resizing, and preprocessing
 
+use crate::cli::InputSource;
 use crate::terminal::CHAR_ASPECT_RATIO;
 use anyhow::Result;
-use image::{DynamicImage, GrayImage, GenericImageView, ImageError, Pixel};
-use std::path::Path;
+use image::{DynamicImage, GrayImage, GenericImageView, ImageReader, Pixel};
+use std::io::Cursor;
+use std::time::Duration;
 
 /// Load an image from a file path
-pub fn load_image(path: &Path) -> Result<DynamicImage, ImageError> {
-    image::open(path)
+pub fn load_image(source: &InputSource) -> Result<DynamicImage> {
+    match source {
+        InputSource::File(path) => {
+            image::open(path).map_err(|e| anyhow::anyhow!("Failed to load image: {}", e))
+        }
+        InputSource::Url(url) => {
+            load_from_url(url)
+        }
+    }
+}
+
+/// Load an image from a URL
+fn load_from_url(url: &str) -> Result<DynamicImage> {
+    let client = reqwest::blocking::Client::builder()
+        .timeout(Duration::from_secs(30))
+        .build()
+        .map_err(|e| anyhow::anyhow!("Failed to create HTTP client: {}", e))?;
+
+    let response = client.get(url).send()
+        .map_err(|e| anyhow::anyhow!("Failed to fetch URL: {}", e))?;
+
+    if !response.status().is_success() {
+        anyhow::bail!("HTTP error: {}", response.status());
+    }
+
+    let bytes = response.bytes()
+        .map_err(|e| anyhow::anyhow!("Failed to read response body: {}", e))?;
+
+    let cursor = Cursor::new(bytes);
+    ImageReader::new(cursor)
+        .with_guessed_format()?
+        .decode()
+        .map_err(|e| anyhow::anyhow!("Failed to decode image: {}", e))
 }
 
 /// Resize mode options

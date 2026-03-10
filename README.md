@@ -4,7 +4,7 @@ Convert images to ASCII art blazing fast with full color support.
 
 ## Example
 
-![usage example](assets/usage.gif)
+https://github.com/user-attachments/assets/4b9859d6-acf4-4bbe-991c-0ca8718618e0
 
 ## Features
 

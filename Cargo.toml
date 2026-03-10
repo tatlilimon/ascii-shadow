@@ -1,6 +1,6 @@
 [package]
 name = "ascii-shadow"
-version = "0.1"
+version = "0.1.0"
 edition = "2026"
 description = "Convert images to ASCII art with color support"
 license = "GPL-v3"

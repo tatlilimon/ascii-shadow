@@ -1,5 +1,4 @@
-#![allow(dead_code)]
-
+pub mod app;
 pub mod charset;
 pub mod cli;
 pub mod color;

@@ -1,9 +1,16 @@
 //! Main conversion logic from pixels to ASCII characters
 
 use crate::charset::Charset;
-use crate::color::{rgb_to_grayscale, ColorMode};
-use crate::image::get_pixel_rgba;
+use crate::charset::braille::pixels_to_braille;
+use crate::color::{ColorMode, rgb_to_grayscale};
+use crate::image::{ResizeMode, get_pixel_rgba, resize_for_terminal};
+use crate::output::format_colored;
+use crate::terminal::CHAR_ASPECT_RATIO;
 use image::{DynamicImage, GenericImageView};
+
+/// Width:height of one Braille dot. A character cell is 2 dots wide and 4 tall,
+/// so with 1:2 cells each dot is square.
+pub const BRAILLE_DOT_ASPECT: f64 = CHAR_ASPECT_RATIO * 4.0 / 2.0;
 
 /// Represents a colored character for output
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -81,6 +88,89 @@ pub fn convert(config: &ConverterConfig, img: &DynamicImage) -> Vec<ColoredChar>
     result
 }
 
+/// Convert an image to Braille. Each character covers a 2x4 block of pixels and
+/// raises a dot wherever the adjusted pixel is at least half bright; its color is
+/// the average of the raised dots (or of the whole block when none are raised).
+pub fn convert_braille(config: &ConverterConfig, img: &DynamicImage) -> Vec<ColoredChar> {
+    let (width, height) = img.dimensions();
+    let (cols, rows) = (width.div_ceil(2), height.div_ceil(4));
+    let mut result = Vec::with_capacity(((cols + 1) * rows) as usize);
+
+    for row in 0..rows {
+        for col in 0..cols {
+            let mut dots = [[false; 2]; 4];
+            let (mut all, mut lit) = ([0u32; 4], [0u32; 4]);
+            for dy in 0..4 {
+                for dx in 0..2 {
+                    let (x, y) = (col * 2 + dx, row * 4 + dy);
+                    if x >= width || y >= height {
+                        continue;
+                    }
+                    let p = adjust_pixel(config, get_pixel_rgba(img, x, y));
+                    let rgb = [p.color.0 as u32, p.color.1 as u32, p.color.2 as u32, 1];
+                    all.iter_mut().zip(rgb).for_each(|(sum, v)| *sum += v);
+                    if p.brightness >= 128 {
+                        dots[dy as usize][dx as usize] = true;
+                        lit.iter_mut().zip(rgb).for_each(|(sum, v)| *sum += v);
+                    }
+                }
+            }
+            let source = if lit[3] > 0 { lit } else { all };
+            let average = |i: usize| (source[i] / source[3].max(1)) as u8;
+            let color = (config.color_mode != ColorMode::None)
+                .then(|| (average(0), average(1), average(2)));
+            result.push(ColoredChar {
+                char: pixels_to_braille(dots),
+                color,
+                bg: config.background,
+            });
+        }
+        result.push(ColoredChar {
+            char: '\n',
+            color: None,
+            bg: None,
+        });
+    }
+
+    result
+}
+
+/// Everything needed to turn a decoded picture into terminal text.
+#[derive(Debug)]
+pub struct RenderPlan {
+    pub config: ConverterConfig,
+    pub resize_mode: ResizeMode,
+    pub preserve_aspect_ratio: bool,
+}
+
+impl RenderPlan {
+    /// Render a picture into at most `cols` × `rows` characters, with ANSI colors.
+    pub fn render(&self, img: &DynamicImage, cols: usize, rows: usize) -> String {
+        let chars = if self.config.charset.is_braille() {
+            let resized = resize_for_terminal(
+                img,
+                cols * 2,
+                rows * 4,
+                self.resize_mode,
+                self.preserve_aspect_ratio,
+                BRAILLE_DOT_ASPECT,
+            );
+            convert_braille(&self.config, &resized)
+        } else {
+            let resized = resize_for_terminal(
+                img,
+                cols,
+                rows,
+                self.resize_mode,
+                self.preserve_aspect_ratio,
+                CHAR_ASPECT_RATIO,
+            );
+            convert(&self.config, &resized)
+        };
+        format_colored(&chars, self.config.color_mode)
+    }
+}
+
 /// Represents an adjusted pixel with brightness and color
 #[derive(Debug, Clone, Copy)]
 struct AdjustedPixel {
@@ -154,6 +244,80 @@ mod tests {
         assert_eq!(result.len(), 6);
         assert_eq!(result[2].char, '\n'); // First newline (after 2 chars)
         assert_eq!(result[4].char, ' '); // Character at (1,1) - black maps to space
+    }
+
+    fn lines(text: &str) -> Vec<&str> {
+        text.lines().collect()
+    }
+
+    #[test]
+    fn braille_raises_dots_where_the_picture_is_bright() {
+        // 4x4 image: left column pair white, right pair black -> two cells per row.
+        let mut img = image::GrayImage::new(4, 4);
+        for (x, _, p) in img.enumerate_pixels_mut() {
+            *p = image::Luma([if x < 2 { 255 } else { 0 }]);
+        }
+        let config = ConverterConfig::new(Box::new(crate::charset::braille::BrailleCharset));
+        let chars = convert_braille(&config, &DynamicImage::ImageLuma8(img));
+        let text: String = chars.iter().map(|c| c.char).collect();
+        assert_eq!(text, "⣿⠀\n");
+        let inverted = ConverterConfig {
+            invert: true,
+            ..ConverterConfig::new(Box::new(crate::charset::braille::BrailleCharset))
+        };
+        let text: String = convert_braille(
+            &inverted,
+            &DynamicImage::ImageLuma8(image::GrayImage::new(2, 4)),
+        )
+        .iter()
+        .map(|c| c.char)
+        .collect();
+        assert_eq!(text, "⣿\n", "invert raises the dots of a black block");
+    }
+
+    #[test]
+    fn braille_handles_sizes_that_are_not_multiples_of_its_block() {
+        let config = ConverterConfig::new(Box::new(crate::charset::braille::BrailleCharset));
+        let img = DynamicImage::ImageLuma8(image::GrayImage::from_pixel(3, 5, image::Luma([255])));
+        let text: String = convert_braille(&config, &img)
+            .iter()
+            .map(|c| c.char)
+            .collect();
+        // 3x5 pixels -> 2x2 cells; the partial cells only raise existing dots.
+        assert_eq!(text, "⣿⡇\n⠉⠁\n");
+    }
+
+    #[test]
+    fn rendering_fits_the_requested_box_in_every_charset() {
+        let img = DynamicImage::ImageRgb8(image::RgbImage::from_pixel(
+            64,
+            64,
+            image::Rgb([200, 120, 40]),
+        ));
+        for name in [
+            "standard",
+            "extended",
+            "alphanumeric",
+            "numbers",
+            "blocks",
+            "braille",
+        ] {
+            let plan = RenderPlan {
+                config: ConverterConfig {
+                    color_mode: ColorMode::None,
+                    ..ConverterConfig::new(crate::charset::from_str(name).unwrap())
+                },
+                resize_mode: ResizeMode::Fit,
+                preserve_aspect_ratio: true,
+            };
+            let text = plan.render(&img, 40, 20);
+            let rows = lines(text.trim_end_matches("\x1b[0m"));
+            assert_eq!(rows.len(), 20, "{name}");
+            assert!(
+                rows.iter().all(|r| r.chars().count() == 40),
+                "{name}: {rows:?}"
+            );
+        }
     }
 
     #[test]

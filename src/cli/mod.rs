@@ -4,6 +4,9 @@ use anyhow::Result;
 use clap::Parser;
 use std::path::PathBuf;
 
+/// Largest accepted character width or height.
+pub const MAX_DIMENSION: usize = 10_000;
+
 /// Input source for the image conversion
 #[derive(Debug, Clone, PartialEq)]
 pub enum InputSource {
@@ -17,7 +20,8 @@ impl InputSource {
     /// Create an InputSource from a string
     /// Detects URLs starting with http:// or https://
     pub fn from_str(s: String) -> Self {
-        if s.starts_with("http://") || s.starts_with("https://") {
+        let lower = s.to_ascii_lowercase();
+        if lower.starts_with("http://") || lower.starts_with("https://") {
             InputSource::Url(s)
         } else {
             InputSource::File(PathBuf::from(s))
@@ -43,10 +47,22 @@ impl InputSource {
     }
 }
 
+fn parse_dimension(value: &str) -> Result<usize, String> {
+    let n: usize = value
+        .parse()
+        .map_err(|_| format!("'{value}' is not a whole number"))?;
+    if n == 0 || n > MAX_DIMENSION {
+        return Err(format!("must be between 1 and {MAX_DIMENSION}"));
+    }
+    Ok(n)
+}
+
 /// ASCII Shadow - Convert images to ASCII art with color support
+///
+/// `-h` is the height option, so help is only available as `--help`.
 #[derive(Parser, Debug)]
 #[command(name = "ascii-shadow")]
-#[command(author, version, about, long_about = None)]
+#[command(author, version, about, long_about = None, disable_help_flag = true)]
 pub struct Args {
     /// Input image path or URL
     #[arg(short, long, value_name = "FILE|URL")]
@@ -65,15 +81,16 @@ pub struct Args {
     pub custom_charset: Option<String>,
 
     /// Character width (auto-detected from terminal if not specified)
-    #[arg(short, long, value_name = "N")]
+    #[arg(short, long, value_name = "N", value_parser = parse_dimension)]
     pub width: Option<usize>,
 
     /// Character height (auto-calculated based on aspect ratio if not specified)
-    #[arg(short, long, value_name = "N")]
+    #[arg(short, long, value_name = "N", value_parser = parse_dimension)]
     pub height: Option<usize>,
 
-    /// Enable color output
-    #[arg(short, long, default_value_t = true, action = clap::ArgAction::SetTrue)]
+    /// Color output; `--color false` is the same as `--color-mode none`
+    #[arg(long, default_value_t = true, action = clap::ArgAction::Set, num_args = 0..=1,
+          default_missing_value = "true", value_name = "BOOL")]
     pub color: bool,
 
     /// Color mode: truecolor, 256, grayscale, none
@@ -81,11 +98,13 @@ pub struct Args {
     pub color_mode: String,
 
     /// Contrast adjustment (-100 to 100)
-    #[arg(long, default_value_t = 0, value_name = "N")]
+    #[arg(long, default_value_t = 0, value_name = "N", allow_negative_numbers = true,
+          value_parser = clap::value_parser!(i32).range(-100..=100))]
     pub contrast: i32,
 
     /// Brightness adjustment (-100 to 100)
-    #[arg(long, default_value_t = 0, value_name = "N")]
+    #[arg(long, default_value_t = 0, value_name = "N", allow_negative_numbers = true,
+          value_parser = clap::value_parser!(i32).range(-100..=100))]
     pub brightness: i32,
 
     /// Invert colors
@@ -100,19 +119,20 @@ pub struct Args {
     #[arg(long, default_value = "fit", value_name = "MODE")]
     pub resize: String,
 
-    /// Preserve aspect ratio
-    #[arg(long, default_value_t = true)]
+    /// Preserve aspect ratio; `--preserve-aspect-ratio false` stretches like `--resize stretch`
+    #[arg(long, default_value_t = true, action = clap::ArgAction::Set, num_args = 0..=1,
+          default_missing_value = "true", value_name = "BOOL")]
     pub preserve_aspect_ratio: bool,
 
-    /// Frames per second override for GIF playback
-    #[arg(long, value_name = "N")]
+    /// Frames per second override for GIF playback (1 to 1000)
+    #[arg(long, value_name = "N", value_parser = clap::value_parser!(u32).range(1..=1000))]
     pub fps: Option<u32>,
 
-    /// Number of animation loops (0 = infinite)
-    #[arg(long, default_value_t = 1, value_name = "N")]
-    pub loops: u32,
+    /// Number of animation loops, 0 = infinite (the GIF's own setting if not specified)
+    #[arg(long, value_name = "N")]
+    pub loops: Option<u32>,
 
-    /// Don't clear screen between frames (scrolling effect)
+    /// Don't clear screen between frames
     #[arg(long, default_value_t = false)]
     pub no_clear: bool,
 }
@@ -126,31 +146,46 @@ impl Args {
         println!("    ascii-shadow [OPTIONS] --input <FILE|URL>");
         println!();
         println!("OPTIONS:");
-        println!("    -i, --input <FILE|URL>     Input image path or URL (required)");
-        println!("    -o, --output <FILE>        Output file (prints to stdout if not specified)");
-        println!("    -c, --charset <NAME>       Charset: standard, extended, alphanumeric, numbers, blocks, braille");
-        println!("        --custom-charset <CHARS>   Custom charset string");
-        println!("    -w, --width <N>            Character width (auto-detected from terminal)");
-        println!("    -h, --height <N>           Character height (auto-calculated)");
-        println!("    --color-mode <MODE>       Color mode: truecolor, 256, grayscale, none");
-        println!("    --contrast <N>             Contrast adjustment (-100 to 100)");
-        println!("    --brightness <N>           Brightness adjustment (-100 to 100)");
-        println!("    --invert                    Invert colors");
-        println!("    --background <HEX>         Background color in hex format");
-        println!("    --resize <MODE>             Resize mode: fit, fill, stretch, crop");
-        println!("    --preserve-aspect-ratio    Preserve aspect ratio");
-        println!("    --fps <N>                  Frames per second for GIF playback");
-        println!("    --loops <N>                Number of animation loops (0 = infinite)");
-        println!("    --no-clear                 Don't clear screen between frames");
-        println!("    --help                      Show this help message (long flag only)");
+        println!("    -i, --input <FILE|URL>          Input image path or URL (required)");
+        println!(
+            "    -o, --output <FILE>             Output file (prints to stdout if not specified)"
+        );
+        println!(
+            "    -c, --charset <NAME>            Charset: standard, extended, alphanumeric, numbers, blocks, braille"
+        );
+        println!("        --custom-charset <CHARS>    Custom charset string, darkest to brightest");
+        println!(
+            "    -w, --width <N>                 Character width (auto-detected from terminal)"
+        );
+        println!("    -h, --height <N>                Character height (auto-calculated)");
+        println!("        --color [true|false]        Color output (default: true)");
+        println!("        --color-mode <MODE>         Color mode: truecolor, 256, grayscale, none");
+        println!("        --contrast <N>              Contrast adjustment (-100 to 100)");
+        println!("        --brightness <N>            Brightness adjustment (-100 to 100)");
+        println!("        --invert                    Invert brightness");
+        println!(
+            "        --background <HEX>          Background color for transparent pixels, or none"
+        );
+        println!("        --resize <MODE>             Resize mode: fit, fill, stretch, crop");
+        println!("        --preserve-aspect-ratio [true|false]");
+        println!("                                    Preserve aspect ratio (default: true)");
+        println!(
+            "        --fps <N>                   Frames per second for GIF playback (1 to 1000)"
+        );
+        println!(
+            "        --loops <N>                 Number of animation loops, 0 = infinite (default: the GIF's)"
+        );
+        println!("        --no-clear                  Don't clear screen between frames");
+        println!("        --help                      Show this help message (long flag only)");
+        println!("    -V, --version                   Show the version");
         println!();
         println!("CHARSETS:");
-        println!("    standard      - Basic ASCII characters (.:-=+*#@)");
+        println!("    standard      - Basic ASCII characters (.:-=+*#%@)");
         println!("    extended      - Extended ASCII with more detail");
-        println!("    alphanumeric  - Full alphanumeric characters");
-        println!("    numbers       - Numbers and punctuation only");
+        println!("    alphanumeric  - Letters and digits only");
+        println!("    numbers       - Digits with light punctuation");
         println!("    blocks        - Unicode block characters (░▒▓█)");
-        println!("    braille       - Braille patterns for high detail");
+        println!("    braille       - Braille patterns, 2x4 dots per character for high detail");
         println!();
         println!("COLOR MODES:");
         println!("    truecolor     - 24-bit RGB (recommended)");
@@ -159,10 +194,10 @@ impl Args {
         println!("    none          - No color");
         println!();
         println!("RESIZE MODES:");
-        println!("    fit           - Fit within dimensions while preserving ratio");
-        println!("    fill          - Fill dimensions, potentially cropping");
-        println!("    stretch       - Stretch to exact dimensions");
-        println!("    crop          - Crop to center of image");
+        println!("    fit           - The whole image, inside the size, aspect ratio preserved");
+        println!("    fill          - Covers the size; overflow is cropped at the center");
+        println!("    stretch       - Exactly the size, aspect ratio ignored");
+        println!("    crop          - The image center at full resolution, cropped to the size");
         println!();
         println!("EXAMPLES:");
         println!("    ascii-shadow --input image.png");
@@ -174,21 +209,20 @@ impl Args {
 
     /// Parse and validate CLI arguments
     pub fn parse_args() -> Result<Self> {
-        // Check for --help flag (long only, -h is for height)
-        let args: Vec<String> = std::env::args().collect();
-        if args.iter().any(|arg| arg == "--help") {
+        // `-h` is the height option, so help is only available as `--help`.
+        let raw: Vec<String> = std::env::args().collect();
+        if raw.iter().skip(1).any(|arg| arg == "--help") {
             Self::print_help();
             std::process::exit(0);
         }
 
-        // Try to parse arguments
         let args = match Self::try_parse() {
             Ok(parsed_args) => parsed_args,
+            Err(e) if e.kind() == clap::error::ErrorKind::DisplayVersion => e.exit(),
             Err(e) => {
-                // Show help on parsing error
                 eprintln!("\nError: {}", e);
                 Self::print_help();
-                std::process::exit(1);
+                std::process::exit(2);
             }
         };
 
@@ -198,16 +232,6 @@ impl Args {
             if !path.exists() {
                 anyhow::bail!("Input file not found: {}", path.display());
             }
-        }
-
-        // Validate contrast range
-        if args.contrast < -100 || args.contrast > 100 {
-            anyhow::bail!("Contrast must be between -100 and 100");
-        }
-
-        // Validate brightness range
-        if args.brightness < -100 || args.brightness > 100 {
-            anyhow::bail!("Brightness must be between -100 and 100");
         }
 
         Ok(args)
@@ -220,7 +244,7 @@ impl Args {
             Some(bg) if bg.eq_ignore_ascii_case("none") => Ok(None),
             Some(hex) => {
                 let hex = hex.trim_start_matches('#');
-                if hex.len() != 6 {
+                if hex.len() != 6 || !hex.chars().all(|c| c.is_ascii_hexdigit()) {
                     return Err("Background color must be 6 hex digits".to_string());
                 }
                 let r = u8::from_str_radix(&hex[0..2], 16)
@@ -238,6 +262,69 @@ impl Args {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use clap::CommandFactory;
+
+    fn parse(extra: &[&str]) -> Result<Args, clap::Error> {
+        let mut argv = vec!["ascii-shadow", "--input", "x.png"];
+        argv.extend_from_slice(extra);
+        Args::try_parse_from(argv)
+    }
+
+    #[test]
+    fn command_definition_is_consistent() {
+        // clap's own consistency check; it panicked on the duplicate `-c` before.
+        Args::command().debug_assert();
+    }
+
+    #[test]
+    fn short_flags_reach_the_documented_options() {
+        let a = parse(&["-c", "blocks", "-w", "40", "-h", "12", "-o", "out.txt"]).unwrap();
+        assert_eq!(
+            (a.charset.as_str(), a.width, a.height),
+            ("blocks", Some(40), Some(12))
+        );
+        assert_eq!(a.output, Some(PathBuf::from("out.txt")));
+    }
+
+    #[test]
+    fn boolean_options_can_be_turned_off_and_bare_flags_still_work() {
+        let a = parse(&["--color", "false", "--preserve-aspect-ratio", "false"]).unwrap();
+        assert!(!a.color && !a.preserve_aspect_ratio);
+        let a = parse(&["--color", "--preserve-aspect-ratio"]).unwrap();
+        assert!(a.color && a.preserve_aspect_ratio);
+        let a = parse(&[]).unwrap();
+        assert!(a.color && a.preserve_aspect_ratio);
+    }
+
+    #[test]
+    fn invalid_numbers_are_rejected_before_any_work() {
+        for bad in [
+            &["--fps", "0"][..],
+            &["--fps", "1001"],
+            &["--width", "0"],
+            &["--height", "0"],
+            &["--width", "10001"],
+            &["--contrast", "101"],
+            &["--brightness", "-101"],
+            &["--loops", "-1"],
+        ] {
+            assert!(parse(bad).is_err(), "{bad:?} should be rejected");
+        }
+        let a = parse(&["--contrast", "-100", "--brightness", "100", "--fps", "1000"]).unwrap();
+        assert_eq!((a.contrast, a.brightness, a.fps), (-100, 100, Some(1000)));
+    }
+
+    #[test]
+    fn loops_default_to_the_gif_setting() {
+        assert_eq!(parse(&[]).unwrap().loops, None);
+        assert_eq!(parse(&["--loops", "0"]).unwrap().loops, Some(0));
+    }
+
+    #[test]
+    fn urls_are_detected_case_insensitively() {
+        assert!(InputSource::from_str("HTTPS://example.com/a.png".into()).is_url());
+        assert!(InputSource::from_str("http-cat.png".into()).is_file());
+    }
 
     #[test]
     fn test_parse_background_none() {
@@ -265,6 +352,16 @@ mod tests {
         };
         assert_eq!(args.parse_background().unwrap(), Some((26, 43, 60)));
     }
+
+    #[test]
+    fn non_ascii_background_is_an_error_not_a_panic() {
+        // Six bytes, but byte offset 2 falls inside "é"; slicing there panicked before.
+        let args = Args {
+            background: Some("aébcd".to_string()),
+            ..Default::default()
+        };
+        assert!(args.parse_background().is_err());
+    }
 }
 
 impl Default for Args {
@@ -285,7 +382,7 @@ impl Default for Args {
             resize: "fit".to_string(),
             preserve_aspect_ratio: true,
             fps: None,
-            loops: 1,
+            loops: None,
             no_clear: false,
         }
     }

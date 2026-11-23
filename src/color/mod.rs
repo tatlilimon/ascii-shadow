@@ -120,9 +120,15 @@ mod tests {
 
     #[test]
     fn test_color_mode_from_str() {
-        assert_eq!(ColorMode::from_str("truecolor").unwrap(), ColorMode::Truecolor);
+        assert_eq!(
+            ColorMode::from_str("truecolor").unwrap(),
+            ColorMode::Truecolor
+        );
         assert_eq!(ColorMode::from_str("256").unwrap(), ColorMode::Color256);
-        assert_eq!(ColorMode::from_str("grayscale").unwrap(), ColorMode::Grayscale);
+        assert_eq!(
+            ColorMode::from_str("grayscale").unwrap(),
+            ColorMode::Grayscale
+        );
         assert_eq!(ColorMode::from_str("none").unwrap(), ColorMode::None);
     }
 }

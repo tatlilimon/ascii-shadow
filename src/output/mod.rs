@@ -1,8 +1,8 @@
 //! Output formatting with ANSI color codes
 
 use crate::color::{
-    grayscale_to_bg, grayscale_to_fg, rgb_to_256_bg, rgb_to_256_fg, rgb_to_truecolor_bg,
-    rgb_to_truecolor_fg, reset_color, ColorMode,
+    ColorMode, grayscale_to_bg, grayscale_to_fg, reset_color, rgb_to_256_bg, rgb_to_256_fg,
+    rgb_to_truecolor_bg, rgb_to_truecolor_fg,
 };
 use crate::converter::ColoredChar;
 
@@ -67,7 +67,9 @@ fn fg_ansi((r, g, b): (u8, u8, u8), mode: ColorMode) -> String {
     match mode {
         ColorMode::Truecolor => rgb_to_truecolor_fg(r, g, b),
         ColorMode::Color256 => rgb_to_256_fg(r, g, b),
-        ColorMode::Grayscale => grayscale_to_fg((r as f32 * 0.299 + g as f32 * 0.587 + b as f32 * 0.114) as u8),
+        ColorMode::Grayscale => {
+            grayscale_to_fg((r as f32 * 0.299 + g as f32 * 0.587 + b as f32 * 0.114) as u8)
+        }
         ColorMode::None => String::new(),
     }
 }
@@ -77,7 +79,9 @@ fn bg_ansi((r, g, b): (u8, u8, u8), mode: ColorMode) -> String {
     match mode {
         ColorMode::Truecolor => rgb_to_truecolor_bg(r, g, b),
         ColorMode::Color256 => rgb_to_256_bg(r, g, b),
-        ColorMode::Grayscale => grayscale_to_bg((r as f32 * 0.299 + g as f32 * 0.587 + b as f32 * 0.114) as u8),
+        ColorMode::Grayscale => {
+            grayscale_to_bg((r as f32 * 0.299 + g as f32 * 0.587 + b as f32 * 0.114) as u8)
+        }
         ColorMode::None => String::new(),
     }
 }
@@ -107,7 +111,11 @@ mod tests {
         ];
         let output = format_colored(&chars, ColorMode::None);
         assert_eq!(output, "A\nB", "no escape codes without color");
-        let with_background = [ColoredChar { char: 'C', color: None, bg: Some((1, 2, 3)) }];
+        let with_background = [ColoredChar {
+            char: 'C',
+            color: None,
+            bg: Some((1, 2, 3)),
+        }];
         assert_eq!(format_colored(&with_background, ColorMode::None), "C");
     }
 

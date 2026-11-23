@@ -1,8 +1,8 @@
 //! Terminal detection and capabilities
 
+use crossterm::ExecutableCommand;
 use crossterm::cursor;
 use crossterm::terminal;
-use crossterm::ExecutableCommand;
 use std::io;
 
 /// Get the current terminal size in (columns, rows)
@@ -37,7 +37,11 @@ pub fn supports_truecolor() -> bool {
 /// Check if terminal supports 256-color palette
 pub fn supports_256_color() -> bool {
     std::env::var("TERM")
-        .map(|term| term.contains("256color") || term.contains("xterm-256color") || term.contains("screen-256color"))
+        .map(|term| {
+            term.contains("256color")
+                || term.contains("xterm-256color")
+                || term.contains("screen-256color")
+        })
         .unwrap_or(false)
 }
 

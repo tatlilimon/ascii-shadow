@@ -45,9 +45,7 @@ pub struct StandardCharset;
 
 impl Charset for StandardCharset {
     fn characters(&self) -> &[char] {
-        &[
-            ' ', '.', ':', '-', '=', '+', '*', '#', '%', '@',
-        ]
+        &[' ', '.', ':', '-', '=', '+', '*', '#', '%', '@']
     }
 }
 
@@ -83,7 +81,9 @@ pub struct NumbersCharset;
 
 impl Charset for NumbersCharset {
     fn characters(&self) -> &[char] {
-        &[' ', '.', ':', '1', '7', '4', '3', '2', '5', '9', '6', '0', '8']
+        &[
+            ' ', '.', ':', '1', '7', '4', '3', '2', '5', '9', '6', '0', '8',
+        ]
     }
 }
 
@@ -97,7 +97,9 @@ impl CustomCharset {
         if s.is_empty() {
             return Err(CharsetError::EmptyCharset);
         }
-        Ok(Self { chars: s.chars().collect() })
+        Ok(Self {
+            chars: s.chars().collect(),
+        })
     }
 }
 
@@ -161,10 +163,26 @@ mod tests {
     #[test]
     fn named_charsets_hold_only_their_documented_characters() {
         let alnum = from_str("alphanumeric").unwrap();
-        assert!(alnum.characters()[1..].iter().all(|c| c.is_ascii_alphanumeric()));
+        assert!(
+            alnum.characters()[1..]
+                .iter()
+                .all(|c| c.is_ascii_alphanumeric())
+        );
         let numbers = from_str("numbers").unwrap();
-        assert!(numbers.characters().iter().all(|c| c.is_ascii_digit() || " .:".contains(*c)));
-        assert_eq!(numbers.characters().iter().filter(|c| c.is_ascii_digit()).count(), 10);
+        assert!(
+            numbers
+                .characters()
+                .iter()
+                .all(|c| c.is_ascii_digit() || " .:".contains(*c))
+        );
+        assert_eq!(
+            numbers
+                .characters()
+                .iter()
+                .filter(|c| c.is_ascii_digit())
+                .count(),
+            10
+        );
         let blocks = from_str("blocks").unwrap();
         assert_eq!(blocks.characters(), &[' ', '░', '▒', '▓', '█']);
         assert!(from_str("braille").unwrap().is_braille());
@@ -172,7 +190,16 @@ mod tests {
 
     #[test]
     fn every_named_charset_is_dark_to_bright_without_duplicates() {
-        for name in ["standard", "extended", "alphanumeric", "alpha", "numbers", "num", "blocks", "block"] {
+        for name in [
+            "standard",
+            "extended",
+            "alphanumeric",
+            "alpha",
+            "numbers",
+            "num",
+            "blocks",
+            "block",
+        ] {
             let charset = from_str(name).unwrap();
             let chars = charset.characters();
             assert_eq!(chars[0], ' ', "{name}: black must map to a blank");
@@ -185,7 +212,10 @@ mod tests {
             assert!(!charset.is_braille());
         }
         assert!(from_str("Standard").is_ok());
-        assert!(matches!(from_str("emoji"), Err(CharsetError::UnknownCharset(_))));
+        assert!(matches!(
+            from_str("emoji"),
+            Err(CharsetError::UnknownCharset(_))
+        ));
     }
 
     #[test]

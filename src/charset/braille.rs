@@ -12,6 +12,10 @@ use super::Charset;
 pub struct BrailleCharset;
 
 impl Charset for BrailleCharset {
+    fn is_braille(&self) -> bool {
+        true
+    }
+
     fn characters(&self) -> &[char] {
         // Braille patterns from U+2800 (empty) to U+28FF (full)
         // We use a subset sorted by visual density
@@ -39,25 +43,24 @@ impl Charset for BrailleCharset {
 
 /// Convert a 2x4 pixel block to a Braille character
 ///
-/// Each cell in the 2x4 array represents a dot in the Braille character:
+/// `pixels[row][col]` is one dot. Unicode numbers the dots column by column:
 /// ```text
-/// (0,0) (0,1)
-/// (1,0) (1,1)
-/// (2,0) (2,1)
-/// (3,0) (3,1)
+/// dot 1 (0,0)  dot 4 (0,1)
+/// dot 2 (1,0)  dot 5 (1,1)
+/// dot 3 (2,0)  dot 6 (2,1)
+/// dot 7 (3,0)  dot 8 (3,1)
 /// ```
+/// and dot `n` is bit `n - 1` of the offset from U+2800.
 pub fn pixels_to_braille(pixels: [[bool; 2]; 4]) -> char {
+    const BITS: [[u32; 2]; 4] = [[0x01, 0x08], [0x02, 0x10], [0x04, 0x20], [0x40, 0x80]];
     let mut code: u32 = 0;
-    // Dot positions in Braille: (row, col) -> bit
-    // Positions: (0,0)=0, (0,1)=1, (1,0)=2, (1,1)=3, (2,0)=4, (2,1)=5, (3,0)=6, (3,1)=7
-    if pixels[0][0] { code |= 1 << 0; }
-    if pixels[0][1] { code |= 1 << 1; }
-    if pixels[1][0] { code |= 1 << 2; }
-    if pixels[1][1] { code |= 1 << 3; }
-    if pixels[2][0] { code |= 1 << 4; }
-    if pixels[2][1] { code |= 1 << 5; }
-    if pixels[3][0] { code |= 1 << 6; }
-    if pixels[3][1] { code |= 1 << 7; }
+    for (row, bits) in BITS.iter().enumerate() {
+        for (col, bit) in bits.iter().enumerate() {
+            if pixels[row][col] {
+                code |= bit;
+            }
+        }
+    }
     char::from_u32(0x2800 + code).unwrap_or('⠀')
 }
 
@@ -89,6 +92,23 @@ mod tests {
     fn test_pixels_to_braille_full() {
         let pixels = [[true; 2]; 4];
         assert_eq!(pixels_to_braille(pixels), '⣿');
+    }
+
+    #[test]
+    fn every_dot_lands_at_its_unicode_position() {
+        // (row, col) -> the single-dot character Unicode defines for that position.
+        let expected = [
+            ((0, 0), '⠁'), ((1, 0), '⠂'), ((2, 0), '⠄'), ((3, 0), '⡀'),
+            ((0, 1), '⠈'), ((1, 1), '⠐'), ((2, 1), '⠠'), ((3, 1), '⢀'),
+        ];
+        for ((row, col), ch) in expected {
+            let mut pixels = [[false; 2]; 4];
+            pixels[row][col] = true;
+            assert_eq!(pixels_to_braille(pixels), ch, "dot at ({row},{col})");
+        }
+        // The left column alone is dots 1, 2, 3 and 7.
+        assert_eq!(pixels_to_braille([[true, false]; 4]), '⡇');
+        assert_eq!(pixels_to_braille([[false, true]; 4]), '⢸');
     }
 
     #[test]

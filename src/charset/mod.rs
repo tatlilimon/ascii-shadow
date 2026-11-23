@@ -2,8 +2,6 @@
 
 pub mod blocks;
 pub mod braille;
-pub mod numbers;
-pub mod standard;
 
 use std::str::FromStr;
 
@@ -35,6 +33,11 @@ pub trait Charset: Send + Sync {
     fn len(&self) -> usize {
         self.characters().len()
     }
+
+    /// Braille draws a 2x4 dot pattern per character instead of mapping brightness.
+    fn is_braille(&self) -> bool {
+        false
+    }
 }
 
 /// Standard ASCII charset
@@ -62,31 +65,25 @@ impl Charset for ExtendedStandardCharset {
     }
 }
 
-/// Alphanumeric charset
+/// Alphanumeric charset: letters and digits (and space for black)
 pub struct AlphanumericCharset;
 
 impl Charset for AlphanumericCharset {
     fn characters(&self) -> &[char] {
         &[
-            ' ', '.', ':', 'i', '|', '!', '>', '?', '<', '+', '-', ']', '[', ')', '(', '}', '{',
-            '1', 'l', 'I', '/', 'J', 'L', 't', 'f', 'j', 'r', 'x', 'n', 'u', 'v', 'c', 'z', 'X',
-            'Y', 'U', 'J', 'C', 'L', 'Q', '0', 'O', 'Z', 'm', 'w', 'q', 'p', 'd', 'b', 'k', 'h',
-            'a', 'o', '*', '#', 'M', 'W', '&', '8', '%', 'B', '@', '$',
+            ' ', 'i', '1', 'l', 'I', 'J', 'L', 't', 'f', 'j', 'r', 'x', 'n', 'u', 'v', 'c', 'z',
+            'X', 'Y', 'U', 'C', 'Q', '0', 'O', 'Z', 'm', 'w', 'q', 'p', 'd', 'b', 'k', 'h', 'a',
+            'o', 'M', 'W', '8', 'B',
         ]
     }
 }
 
-/// Numbers-only charset
+/// Numbers charset: digits by ink coverage, with light punctuation for faint areas
 pub struct NumbersCharset;
 
 impl Charset for NumbersCharset {
     fn characters(&self) -> &[char] {
-        &[
-            ' ', '.', '1', '!', '+', '=', '-', ':', ';', 'i', '|', '>', '?', '<', ']', '[', ')', '(',
-            '}', '{', '/', 'l', 'L', 't', 'f', 'j', 'r', 'x', 'n', 'u', 'v', 'c', 'z', 'X', 'Y',
-            'U', 'J', 'C', 'L', 'Q', '0', 'O', 'Z', 'm', 'w', 'q', 'p', 'd', 'b', 'k', 'h', 'a',
-            'o', '*', '#', 'M', 'W', '&', '8', '%', 'B', '@', '$',
-        ]
+        &[' ', '.', ':', '1', '7', '4', '3', '2', '5', '9', '6', '0', '8']
     }
 }
 
@@ -159,5 +156,44 @@ mod tests {
     #[test]
     fn test_custom_charset_empty() {
         assert!(CustomCharset::new("").is_err());
+    }
+
+    #[test]
+    fn named_charsets_hold_only_their_documented_characters() {
+        let alnum = from_str("alphanumeric").unwrap();
+        assert!(alnum.characters()[1..].iter().all(|c| c.is_ascii_alphanumeric()));
+        let numbers = from_str("numbers").unwrap();
+        assert!(numbers.characters().iter().all(|c| c.is_ascii_digit() || " .:".contains(*c)));
+        assert_eq!(numbers.characters().iter().filter(|c| c.is_ascii_digit()).count(), 10);
+        let blocks = from_str("blocks").unwrap();
+        assert_eq!(blocks.characters(), &[' ', '░', '▒', '▓', '█']);
+        assert!(from_str("braille").unwrap().is_braille());
+    }
+
+    #[test]
+    fn every_named_charset_is_dark_to_bright_without_duplicates() {
+        for name in ["standard", "extended", "alphanumeric", "alpha", "numbers", "num", "blocks", "block"] {
+            let charset = from_str(name).unwrap();
+            let chars = charset.characters();
+            assert_eq!(chars[0], ' ', "{name}: black must map to a blank");
+            assert_eq!(charset.map_brightness(0), ' ');
+            assert_eq!(charset.map_brightness(255), *chars.last().unwrap());
+            let mut unique = chars.to_vec();
+            unique.sort();
+            unique.dedup();
+            assert_eq!(unique.len(), chars.len(), "{name} repeats a character");
+            assert!(!charset.is_braille());
+        }
+        assert!(from_str("Standard").is_ok());
+        assert!(matches!(from_str("emoji"), Err(CharsetError::UnknownCharset(_))));
+    }
+
+    #[test]
+    fn brightness_steps_through_every_character_in_order() {
+        let charset = StandardCharset;
+        let mapped: Vec<char> = (0..=255u8).map(|b| charset.map_brightness(b)).collect();
+        let mut seen: Vec<char> = mapped.clone();
+        seen.dedup();
+        assert_eq!(seen, charset.characters());
     }
 }

@@ -8,6 +8,10 @@ use crate::converter::ColoredChar;
 
 /// Format a sequence of colored characters into a string with ANSI escape codes
 pub fn format_colored(chars: &[ColoredChar], color_mode: ColorMode) -> String {
+    // Without color the output is plain text: no escape codes at all.
+    if color_mode == ColorMode::None {
+        return chars.iter().map(|c| c.char).collect();
+    }
     let mut output = String::new();
     let mut last_color = None;
     let mut last_bg = None;
@@ -102,9 +106,9 @@ mod tests {
             },
         ];
         let output = format_colored(&chars, ColorMode::None);
-        assert!(output.contains('A'));
-        assert!(output.contains('B'));
-        assert!(output.contains('\n'));
+        assert_eq!(output, "A\nB", "no escape codes without color");
+        let with_background = [ColoredChar { char: 'C', color: None, bg: Some((1, 2, 3)) }];
+        assert_eq!(format_colored(&with_background, ColorMode::None), "C");
     }
 
     #[test]
